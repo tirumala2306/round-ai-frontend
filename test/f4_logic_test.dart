@@ -734,6 +734,61 @@ void main() {
       await c.close();
     });
 
+    test('dictation: empty transcript never calls the API', () async {
+      final FakeNotesRepository notes = FakeNotesRepository();
+      final NoteCubit c = _cubit(notes, FakeAiRepository());
+      await c.loadTemplates();
+      await c.generateFromDictation(transcript: '   ');
+      expect(notes.generateKeys, isEmpty);
+      expect(c.state.error?.code, 'transcript_required');
+      expect(c.state.hasDraft, isFalse);
+      await c.close();
+    });
+
+    test('dictation: success, failure keeps prior draft, retry reuses key',
+        () async {
+      final FakeNotesRepository notes = FakeNotesRepository();
+      int calls = 0;
+      notes.onGenerateFromDictation = (String key) async {
+        calls++;
+        return calls == 1
+            ? Err<AiEnvelope>(FakeAiRepository.failure('network_error'))
+            : Ok<AiEnvelope>(noteEnvelope(id: 'dict-1'));
+      };
+      final NoteCubit c = _cubit(notes, FakeAiRepository());
+      await c.loadTemplates();
+      const String transcript =
+          'Overnight oxygen need increased on 2 L nasal cannula.';
+      await c.generateFromDictation(transcript: transcript);
+      expect(c.state.error, isNotNull);
+      expect(c.state.hasDraft, isFalse);
+      expect(notes.lastTranscript, transcript);
+      await c.generateFromDictation(transcript: transcript);
+      expect(notes.generateKeys[0], notes.generateKeys[1]);
+      expect(c.state.error, isNull);
+      expect(c.state.hasDraft, isTrue);
+      await c.close();
+    });
+
+    test('dictation: failed regenerate keeps prior draft on screen', () async {
+      final FakeNotesRepository notes = FakeNotesRepository();
+      final NoteCubit c = _cubit(notes, FakeAiRepository());
+      await c.loadTemplates();
+      await c.generateFromDictation(
+        transcript: 'Patient reports fever overnight with chills.',
+      );
+      expect(c.state.hasDraft, isTrue);
+      notes.generated = Err<AiEnvelope>(
+        FakeAiRepository.failure('ai_invalid_output'),
+      );
+      await c.generateFromDictation(
+        transcript: 'Patient reports fever overnight with chills.',
+      );
+      expect(c.state.error, isNotNull);
+      expect(c.state.hasDraft, isTrue);
+      await c.close();
+    });
+
     test('a failed export reports and returns nothing', () async {
       final FakeNotesRepository notes = FakeNotesRepository()
         ..exported = Err<String>(FakeAiRepository.failure('network_error'));

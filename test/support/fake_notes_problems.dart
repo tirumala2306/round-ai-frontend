@@ -176,6 +176,7 @@ class FakeNotesRepository implements NotesRepository {
   }
 
   String? lastTranscript;
+  Future<Result<AiEnvelope>> Function(String key)? onGenerateFromDictation;
 
   @override
   Future<Result<AiEnvelope>> generateFromDictation(
@@ -193,6 +194,9 @@ class FakeNotesRepository implements NotesRepository {
     lastTranscript = transcript;
     lastSourceIds = sourceIds;
     lastToken = cancelToken;
+    final Future<Result<AiEnvelope>> Function(String)? handler =
+        onGenerateFromDictation;
+    if (handler != null) return handler(idempotencyKey);
     return Future<Result<AiEnvelope>>.value(
       generated ?? Ok<AiEnvelope>(noteEnvelope()),
     );

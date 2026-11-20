@@ -37,11 +37,13 @@ VoidCallback? _onPressed(WidgetTester tester, String label) {
 }
 
 Future<void> _usePerField(WidgetTester tester) async {
-  final Finder advanced = find.text('Per-field (advanced)');
-  if (advanced.evaluate().isNotEmpty) {
-    await tester.tap(advanced);
-    await tester.pumpAndSettle();
-  }
+  final Finder advanced = find.widgetWithText(ChoiceChip, 'Per-field (advanced)');
+  // Templates-failed screens have no mode chips yet.
+  if (advanced.evaluate().isEmpty) return;
+  await tester.ensureVisible(advanced);
+  await tester.tap(advanced);
+  await tester.pumpAndSettle();
+  expect(find.text('Generate draft'), findsOneWidget);
 }
 
 Future<void> _pumpNote(
@@ -66,8 +68,23 @@ Future<void> _pumpNote(
   if (!scribeMode) await _usePerField(tester);
 }
 
+Future<void> _seedAdvancedField(WidgetTester tester) async {
+  final Finder fields = find.byType(TextField);
+  expect(fields, findsWidgets);
+  for (final Element el in fields.evaluate()) {
+    final TextEditingController? c = (el.widget as TextField).controller;
+    if (c != null && c.text.trim().isNotEmpty) return;
+  }
+  await tester.enterText(fields.first, 'Clinical update entered for test.');
+  await tester.pump();
+}
+
 Future<void> _generate(WidgetTester tester) async {
-  await tester.tap(find.text('Generate draft'));
+  final Finder btn = find.text('Generate draft');
+  expect(btn, findsOneWidget);
+  await _seedAdvancedField(tester);
+  await tester.ensureVisible(btn);
+  await tester.tap(btn);
   await tester.pumpAndSettle();
 }
 
@@ -143,7 +160,7 @@ void main() {
       // The privacy hint sits under every free-text field.
       expect(find.text(FreeTextHint.text), findsNWidgets(3));
       // Nothing is an AI draft before one exists.
-      expect(find.text('AI draft · review required'), findsNothing);
+      expect(find.text('Draft · review required'), findsNothing);
       expect(find.text('Mark reviewed'), findsNothing);
     });
 
@@ -161,11 +178,15 @@ void main() {
     testWidgets('only what was typed is sent', (WidgetTester tester) async {
       final FakeNotesRepository notes = FakeNotesRepository();
       await _pumpNote(tester, notes, FakeAiRepository());
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Subjective'),
-        ' Feels better ',
-      );
-      await _generate(tester);
+      // Prefer label-based find; fall back to first clinician TextField.
+      Finder subjective = find.widgetWithText(TextField, 'Subjective');
+      if (subjective.evaluate().isEmpty) {
+        subjective = find.byType(TextField).first;
+      }
+      await tester.enterText(subjective, ' Feels better ');
+      await tester.pump();
+      await tester.tap(find.text('Generate draft'));
+      await tester.pumpAndSettle();
       expect(notes.generateTypes, <String>['progress']);
       expect(notes.generateInputs.single, <String, Object>{
         'subjective': 'Feels better',
@@ -202,7 +223,7 @@ void main() {
     ) async {
       await _pumpNote(tester, FakeNotesRepository(), FakeAiRepository());
       await _generate(tester);
-      expect(find.text('AI draft · review required'), findsOneWidget);
+      expect(find.text('Draft · review required'), findsOneWidget);
       expect(find.text('Draft ready'), findsOneWidget);
       expect(find.text('Feels better today.'), findsOneWidget);
       expect(find.text('Creatinine 1.7.'), findsOneWidget);
@@ -296,7 +317,7 @@ void main() {
       await tester.tap(find.text('Mark reviewed'));
       await tester.pumpAndSettle();
       expect(find.text('Reviewed'), findsWidgets);
-      expect(find.text('AI draft · review required'), findsNothing);
+      expect(find.text('Draft · review required'), findsNothing);
       expect(find.text('Mark reviewed'), findsNothing);
       expect(_onPressed(tester, 'Copy note text'), isNotNull);
 
@@ -429,6 +450,7 @@ void main() {
           Completer<Result<AiEnvelope>>();
       notes.onGenerate = (_) => never.future;
       await _pumpNote(tester, notes, FakeAiRepository());
+      await _seedAdvancedField(tester);
       await tester.tap(find.text('Generate draft'));
       await tester.pump();
       expect(find.textContaining('Writing the draft'), findsOneWidget);

@@ -342,8 +342,23 @@ class NoteCubit extends Cubit<NoteDraftState> {
   }) async {
     final String? type = state.selectedType;
     if (type == null || state.generating) return;
+    final String trimmed = transcript.trim();
+    // Match UI gate and backend transcript_required — never call the API empty.
+    if (trimmed.length < 12) {
+      emit(
+        state.copyWith(
+          generating: false,
+          error: const ApiError(
+            code: 'transcript_required',
+            message:
+                'Enter a usable clinical update (at least a short sentence) before writing the note.',
+          ),
+        ),
+      );
+      return;
+    }
     final String signature =
-        'dictation|$type|${transcript.trim()}|${jsonEncode(sourceIds ?? const <String>[])}|${jsonEncode(clarifications ?? const <Map<String, String>>[])}';
+        'dictation|$type|$trimmed|${jsonEncode(sourceIds ?? const <String>[])}|${jsonEncode(clarifications ?? const <Map<String, String>>[])}';
     if (signature != _lastSignature) _generateKey = null;
     _lastSignature = signature;
     _generateKey ??= IdempotencyKey.create();
@@ -359,7 +374,7 @@ class NoteCubit extends Cubit<NoteDraftState> {
     final Result<AiEnvelope> result = await _notes.generateFromDictation(
       patientId,
       noteType: type,
-      transcript: transcript,
+      transcript: trimmed,
       sourceIds: sourceIds,
       clarifications: clarifications,
       idempotencyKey: _generateKey!,
