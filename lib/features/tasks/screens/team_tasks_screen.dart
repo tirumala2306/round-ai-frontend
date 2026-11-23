@@ -39,8 +39,40 @@ class TeamTasksScreen extends StatelessWidget {
   }
 }
 
-class _TeamView extends StatelessWidget {
+class _TeamView extends StatefulWidget {
   const _TeamView();
+
+  @override
+  State<_TeamView> createState() => _TeamViewState();
+}
+
+class _TeamViewState extends State<_TeamView> {
+  ValueNotifier<int>? _sync;
+  int _seen = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _sync = InjectionContainer.instance.censusSync.revision;
+      _seen = _sync!.value;
+      _sync!.addListener(_onCensusSync);
+    } catch (_) {}
+  }
+
+  void _onCensusSync() {
+    final ValueNotifier<int>? sync = _sync;
+    if (sync == null || !mounted) return;
+    if (sync.value == _seen) return;
+    _seen = sync.value;
+    context.read<TeamTasksCubit>().load();
+  }
+
+  @override
+  void dispose() {
+    _sync?.removeListener(_onCensusSync);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

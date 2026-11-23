@@ -248,6 +248,7 @@ class PatientTasksCubit extends Cubit<PatientTasksState> {
         emit(state.copyWith(adding: false, actionError: failure.apiError));
         return false;
       case Ok<void>():
+        markCensusDirty();
         emit(state.copyWith(adding: false, changes: state.changes + 1));
         await _reloadTasks();
         return true;

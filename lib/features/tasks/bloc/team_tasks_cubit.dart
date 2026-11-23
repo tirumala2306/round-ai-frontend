@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:round_ai/core/errors/failures.dart';
 import 'package:round_ai/core/errors/result.dart';
 import 'package:round_ai/core/network/api_error.dart';
+import 'package:round_ai/core/di/injection_container.dart';
 import 'package:round_ai/core/sync/census_sync_mark.dart';
+import 'package:round_ai/core/sync/patient_status_store.dart';
 import 'package:round_ai/features/census/models/patient_summary.dart';
 import 'package:round_ai/features/census/repository/census_repository.dart';
 import 'package:round_ai/features/tasks/models/patient_task.dart';
@@ -101,9 +103,15 @@ class TeamTasksCubit extends Cubit<TeamTasksState> {
       emit(state.copyWith(loading: false, error: failure.apiError));
       return;
     }
+    PatientStatusStore? statusStore;
+    try {
+      statusStore = InjectionContainer.instance.patientStatusStore;
+    } catch (_) {}
     final List<PatientSummary> patients = <PatientSummary>[
-      for (final PatientSummary p in (census as Ok<List<PatientSummary>>).value)
-        if (p.openTasks > 0) p,
+      for (final PatientSummary raw
+          in (census as Ok<List<PatientSummary>>).value)
+        if ((statusStore?.overlay(raw) ?? raw).openTasks > 0)
+          statusStore?.overlay(raw) ?? raw,
     ];
     final List<Result<List<PatientTask>>> lists =
         await Future.wait<Result<List<PatientTask>>>(

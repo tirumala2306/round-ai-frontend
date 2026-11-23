@@ -4,6 +4,7 @@ import 'package:round_ai/core/errors/result.dart';
 import 'package:round_ai/core/network/api_client.dart';
 import 'package:round_ai/core/network/api_endpoints.dart';
 import 'package:round_ai/core/network/api_error.dart';
+import 'package:round_ai/core/sync/census_sync_mark.dart';
 import 'package:round_ai/core/utils/json_utils.dart';
 import 'package:round_ai/features/tasks/models/patient_task.dart';
 import 'package:round_ai/features/tasks/repository/tasks_repository.dart';
@@ -110,7 +111,7 @@ class TasksRepositoryImpl implements TasksRepository {
     DateTime? dueAt,
   }) async {
     try {
-      await _client.post<Object>(
+      final Response<Object> response = await _client.post<Object>(
         ApiEndpoints.patientTaskList(patientId),
         data: <String, String>{
           // Backend: POST { text, owner?, due? }
@@ -118,6 +119,7 @@ class TasksRepositoryImpl implements TasksRepository {
           ..._details(owner, dueAt),
         },
       );
+      applyPatientStatusFromBody(response.data);
       return const Ok<void>(null);
     } on ApiError catch (error) {
       return Err<void>(ApiFailure(error));
@@ -131,10 +133,11 @@ class TasksRepositoryImpl implements TasksRepository {
     DateTime? dueAt,
   }) async {
     try {
-      await _client.post<Object>(
+      final Response<Object> response = await _client.post<Object>(
         ApiEndpoints.taskAccept(taskId),
         data: _details(owner, dueAt),
       );
+      applyPatientStatusFromBody(response.data);
       return const Ok<void>(null);
     } on ApiError catch (error) {
       return Err<void>(ApiFailure(error));
@@ -151,7 +154,8 @@ class TasksRepositoryImpl implements TasksRepository {
 
   Future<Result<void>> _post(String path) async {
     try {
-      await _client.post<Object>(path);
+      final Response<Object> response = await _client.post<Object>(path);
+      applyPatientStatusFromBody(response.data);
       return const Ok<void>(null);
     } on ApiError catch (error) {
       return Err<void>(ApiFailure(error));
